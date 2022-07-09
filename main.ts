@@ -1,30 +1,29 @@
 import { json, serve } from "sift/mod.ts";
 import { catchAll, compose, cors, log } from "./lib/filters.ts";
 import { methods } from "./lib/methods.ts";
-
-type Todo = {
-  url: URL;
-  completed: boolean;
-};
-
-const todos: Todo[] = [];
+import {
+  clear,
+  create,
+  createDB,
+  get,
+  list,
+  remove,
+  update,
+} from "./lib/todo.ts";
 
 const filters = compose(cors, log, catchAll);
+const db = createDB();
+
 serve({
   "/": filters(
     methods({
-      GET: () => json(todos),
+      GET: () => json(list(db)),
       POST: async (req) => {
-        const base = new URL(req.url);
-        const url = new URL(`/todos/${todos.length}`, base);
         const data = await req.json();
-        const todo: Todo = { ...data, completed: false, url };
-        todos.push(todo);
-        return json(todo);
+        return json(create(data, (id) => new URL(`/todos/${id}`, req.url), db));
       },
       DELETE: () => {
-        todos.length = 0;
-        return json([]);
+        return json(clear(db));
       },
     }),
   ),
@@ -32,19 +31,16 @@ serve({
     methods({
       GET: (_req, _, params = {}) => {
         const id = parseInt(params.id, 10);
-        return json(todos[id]);
+        return json(get(id, db));
       },
       PATCH: async (req, _, params = {}) => {
         const id = parseInt(params.id, 10);
         const data = await req.json();
-        const todo: Todo = { ...todos[id], ...data };
-        todos[id] = todo;
-        return json(todo);
+        return json(update(id, data, db));
       },
       DELETE: (_req, _, params = {}) => {
         const id = parseInt(params.id, 10);
-        const deleted: Todo = todos.splice(id, 1)[0];
-        return json(deleted);
+        return json(remove(id, db));
       },
     }),
   ),
