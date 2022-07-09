@@ -33,6 +33,14 @@ export const log: Filter = (next) =>
     return res;
   };
 
+export const proxyProto = (next: Handler): Handler => {
+  return (req, ...args) => {
+    const url = new URL(req.url);
+    url.protocol = req.headers.get("X-Forwarded-Proto") ?? url.protocol;
+    return next(new Request(url, req), ...args);
+  };
+};
+
 export const catchAll: Filter = (h) =>
   async (...args) => {
     try {

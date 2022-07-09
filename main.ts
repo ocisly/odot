@@ -1,5 +1,5 @@
 import { json, serve } from "sift/mod.ts";
-import { catchAll, compose, cors, log } from "./lib/filters.ts";
+import { catchAll, compose, cors, log, proxyProto } from "./lib/filters.ts";
 import { methods } from "./lib/methods.ts";
 import {
   clear,
@@ -11,7 +11,7 @@ import {
   update,
 } from "./lib/todo.ts";
 
-const filters = compose(cors, log, catchAll);
+const filters = compose(cors, proxyProto, log, catchAll);
 const db = createDB();
 
 serve({
