@@ -1,36 +1,6 @@
-import { Handler, json, serve } from "https://deno.land/x/sift@0.5.0/mod.ts";
-
-const cors = (next: Handler): Handler => {
-  return async (req, ...args) => {
-    if (req.method === "OPTIONS") {
-      return new Response(null, {
-        headers: {
-          "Access-Control-Allow-Headers":
-            "Origin, X-Requested-With, Content-Type, Accept",
-          "Access-Control-Allow-Methods":
-            "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-          "Access-Control-Allow-Origin": "*",
-        },
-        status: 204,
-      });
-    }
-
-    const res = await next(req, ...args);
-    res.headers.append("Access-Control-Allow-Origin", "*");
-    return res;
-  };
-};
-
-const log = (next: Handler): Handler => {
-  return async (req, ...args) => {
-    const reqText = await req.clone().text();
-    const res = await next(req, ...args);
-    console.log(
-      `${req.method} ${req.url} ${reqText} -> ${await res.clone().text()}`,
-    );
-    return res;
-  };
-};
+import { json, serve } from "sift/mod.ts";
+import { catchAll, compose, cors, log } from "./lib/filters.ts";
+import { methods } from "./lib/methods.ts";
 
 type Todo = {
   url: URL;
@@ -39,32 +9,44 @@ type Todo = {
 
 const todos: Todo[] = [];
 
+const filters = compose(cors, log, catchAll);
 serve({
-  "/": cors(async (request: Request) => {
-    if (request.method === "POST") {
-      const data = await request.json();
-      const base = new URL(request.url);
-      const url = new URL(`/todos/${todos.length}`, base);
-      const todo: Todo = { ...data, completed: false, url };
-      todos.push(todo);
-      return json(todo);
-    } else if (request.method === "DELETE") {
-      todos.length = 0;
-      return json([]);
-    }
-    return json(todos);
-  }),
-  "/todos/:id": cors(log(async (request: Request, _, params = {}) => {
-    const id = parseInt(params.id, 10);
-    if (request.method === "PATCH") {
-      const data = await request.json();
-      const todo: Todo = { ...todos[id], ...data };
-      todos[id] = todo;
-      return json(todo);
-    } else if (request.method === "DELETE") {
-      const deleted: Todo = todos.splice(id, 1)[0];
-      return json(deleted);
-    }
-    return json(todos[id]);
-  })),
+  "/": filters(
+    methods({
+      GET: () => json(todos),
+      POST: async (req) => {
+        const base = new URL(req.url);
+        const url = new URL(`/todos/${todos.length}`, base);
+        const data = await req.json();
+        const todo: Todo = { ...data, completed: false, url };
+        todos.push(todo);
+        return json(todo);
+      },
+      DELETE: () => {
+        todos.length = 0;
+        return json([]);
+      },
+    }),
+  ),
+  "/todos/:id": filters(
+    methods({
+      GET: (_req, _, params = {}) => {
+        const id = parseInt(params.id, 10);
+        return json(todos[id]);
+      },
+      PATCH: async (req, _, params = {}) => {
+        const id = parseInt(params.id, 10);
+        const data = await req.json();
+        const todo: Todo = { ...todos[id], ...data };
+        todos[id] = todo;
+        return json(todo);
+      },
+      DELETE: (_req, _, params = {}) => {
+        const id = parseInt(params.id, 10);
+        const deleted: Todo = todos.splice(id, 1)[0];
+        return json(deleted);
+      },
+    }),
+  ),
+  404: () => json({ error: "not found" }, { status: 404 }),
 });
